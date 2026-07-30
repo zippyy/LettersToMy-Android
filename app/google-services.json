@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "671442932343",
+    "project_id": "letterstomy-91466",
+    "storage_bucket": "letterstomy-91466.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:671442932343:android:009748cb651a01c69eec72",
+        "android_client_info": {
+          "package_name": "com.letters2my.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBtvUgKzKZDj4SfNhphJe6CqFX6vdKp5gI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

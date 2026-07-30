@@ -33,6 +33,7 @@ class WebDAVSyncProvider(
             if (resp.isSuccessful) Log.d(TAG, "Pushed to $name: ${data.size} bytes")
             else Log.e(TAG, "Push failed: ${resp.code}")
         }
+        Unit
     }
 
     override suspend fun pullDatabase(): CloudSyncResult? = withContext(Dispatchers.IO) {

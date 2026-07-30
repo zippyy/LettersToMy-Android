@@ -41,6 +41,7 @@ class DropboxSyncProvider(
                 Log.e(TAG, "Push failed: ${resp.code} ${resp.body?.string()}")
             }
         }
+        Unit
     }
 
     override suspend fun pullDatabase(): CloudSyncResult? = withContext(Dispatchers.IO) {

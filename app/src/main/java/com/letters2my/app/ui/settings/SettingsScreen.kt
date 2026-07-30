@@ -51,6 +51,10 @@ fun SettingsScreen() {
     // Dropbox config state
     var dropboxToken by remember { mutableStateOf(prefs.getString("dropbox_token", "") ?: "") }
 
+    // Self-hosted config state
+    var selfhostedURL by remember { mutableStateOf(prefs.getString("selfhosted_url", "") ?: "") }
+    var selfhostedToken by remember { mutableStateOf(prefs.getString("selfhosted_token", "") ?: "") }
+
     val signInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -72,6 +76,8 @@ fun SettingsScreen() {
             putString("webdav_user", webdavUser)
             putString("webdav_password", webdavPassword)
             putString("dropbox_token", dropboxToken)
+            putString("selfhosted_url", selfhostedURL)
+            putString("selfhosted_token", selfhostedToken)
         }.apply()
     }
 
@@ -165,6 +171,22 @@ fun SettingsScreen() {
             ) {
                 OutlinedTextField(dropboxToken, { dropboxToken = it; savePrefs() }, label = { Text("Access Token") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                 Text("Get a token from the Dropbox App Console → Generate access token.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            // ── Self-Hosted ──
+            var selfhostedExpanded by remember { mutableStateOf(false) }
+            ProviderCard(
+                title = "Self-Hosted",
+                subtitle = "Your own LettersToMy sync server (Docker)",
+                icon = Icons.Default.Home,
+                iconColor = MaterialTheme.colorScheme.primaryContainer,
+                isConfigured = selfhostedURL.isNotEmpty(),
+                expanded = selfhostedExpanded,
+                onToggle = { selfhostedExpanded = it }
+            ) {
+                OutlinedTextField(selfhostedURL, { selfhostedURL = it; savePrefs() }, label = { Text("Server URL") }, placeholder = { Text("https://sync.example.com:8080") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(selfhostedToken, { selfhostedToken = it; savePrefs() }, label = { Text("API Token") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                Text("Run docker compose up -d from LettersToMy-SelfHostedSync.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             // ── About ──

@@ -59,6 +59,9 @@ interface BranchDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(branch: BranchEntity)
 
+    @Query("SELECT COUNT(*) FROM branches")
+    suspend fun count(): Int
+
     @Delete
     suspend fun delete(branch: BranchEntity)
 }

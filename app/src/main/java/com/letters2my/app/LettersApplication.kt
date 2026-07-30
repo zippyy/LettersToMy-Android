@@ -6,7 +6,8 @@ import com.letters2my.app.data.local.LettersDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import java.util.UUID
 
 class LettersApplication : Application() {
@@ -19,9 +20,8 @@ class LettersApplication : Application() {
         val db = LettersDatabase.getInstance(this)
         val dao = db.branchDao()
 
-        CoroutineScope(Dispatchers.IO).launch {
-            val existing = dao.getAll()
-            kotlinx.coroutines.flow.firstOrNull(existing)?.let { return@launch }
+        runBlocking {
+            if (dao.count() > 0) return@runBlocking
 
             val defaults = listOf(
                 "Parents" to "parents",

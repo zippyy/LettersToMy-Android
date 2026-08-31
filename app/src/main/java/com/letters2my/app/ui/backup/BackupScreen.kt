@@ -151,7 +151,11 @@ fun BackupScreen(
                                 OutlinedButton(onClick = {
                                     restoringPassphrase = passphrase
                                     viewModel.previewRemote(backup.id, restoringPassphrase)
-                                }, enabled = restoringPassphrase.isNotBlank() && !isBusy) {
+                                    // enabled must gate on the FIELD (passphrase):
+                                    // restoringPassphrase is assigned inside this very
+                                    // onClick, so gating on it would leave the button
+                                    // permanently disabled (dead restore path).
+                                }, enabled = passphrase.isNotBlank() && !isBusy) {
                                     Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp))
                                     Spacer(Modifier.width(4.dp))
                                     Text("Restore")

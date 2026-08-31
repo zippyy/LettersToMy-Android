@@ -27,7 +27,10 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    onCreateBackup: () -> Unit = {},
+    onRestore: () -> Unit = {}
+) {
     val context = LocalContext.current
     val app = context.applicationContext as LettersApplication
     val scope = rememberCoroutineScope()
@@ -190,15 +193,13 @@ fun SettingsScreen() {
                     )
                     Spacer(Modifier.height(8.dp))
                     Row {
-                        OutlinedButton(onClick = {
-                            // Triggered from a dedicated flow (see BackupScreen).
-                        }) {
+                        OutlinedButton(onClick = onCreateBackup) {
                             Icon(Icons.Default.Upload, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
                             Text("Create Backup")
                         }
                         Spacer(Modifier.width(8.dp))
-                        OutlinedButton(onClick = {}) {
+                        OutlinedButton(onClick = onRestore) {
                             Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
                             Text("Restore")
@@ -206,7 +207,7 @@ fun SettingsScreen() {
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Full backup/restore flow is on the Backup screen (Letters → overflow).",
+                        "Full backup/restore flow is on the Backup screen (Settings → Backup & Restore).",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

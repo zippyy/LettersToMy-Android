@@ -19,7 +19,14 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="Letters to My"
-        android:theme="@style/Theme.LettersToMy">
+        android:theme="@style/Theme.LettersToMy"
+        android:usesCleartextTraffic="true">
+        <!-- usesCleartextTraffic mirrors iOS NSAllowsLocalNetworking: the
+             self-hosted sync server is user-configured and routinely lives on
+             a plain-HTTP LAN endpoint (e.g. http://10.0.2.2:8080 from the
+             emulator, or a Docker box on the home network). API tokens are
+             still stored in the Keystore; only the archive/API payloads travel
+             this channel. -->
 
         <activity
             android:name=".MainActivity"

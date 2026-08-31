@@ -7,17 +7,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.letters2my.app.LettersApplication
 import com.letters2my.app.ui.backup.BackupScreen
 import com.letters2my.app.ui.family.FamilyScreen
 import com.letters2my.app.ui.letters.LetterDetailScreen
 import com.letters2my.app.ui.letters.LetterEditorScreen
 import com.letters2my.app.ui.letters.LettersScreen
+import com.letters2my.app.ui.onboarding.OnboardingScreen
 import com.letters2my.app.ui.people.PeopleScreen
 import com.letters2my.app.ui.settings.SettingsScreen
 import com.letters2my.app.ui.timeline.TimelineScreen
@@ -44,6 +47,22 @@ private val tabs = listOf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LettersToMyApp() {
+    val context = LocalContext.current
+    val app = context.applicationContext as LettersApplication
+    var onboarded: Boolean by remember { mutableStateOf(app.settings.onboarded) }
+
+    if (!onboarded) {
+        // First-launch onboarding; completes by flagging SettingsRepository
+        // (idempotent: seeded branches are created in Application.onCreate).
+        OnboardingScreen(
+            onComplete = {
+                app.settings.onboarded = true
+                onboarded = true
+            }
+        )
+        return
+    }
+
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -92,7 +111,12 @@ fun LettersToMyApp() {
             composable("timeline") { TimelineScreen() }
             composable("family") { FamilyScreen() }
             composable("people") { PeopleScreen() }
-            composable("settings") { SettingsScreen() }
+            composable("settings") {
+                SettingsScreen(
+                    onCreateBackup = { navController.navigate("backup") },
+                    onRestore = { navController.navigate("backup") }
+                )
+            }
 
             composable(
                 "editor/{letterId}",

@@ -8,6 +8,12 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
+    <!-- Permissions are optional: the attachment pickers degrade gracefully
+         when the hardware is absent (returns no matching sources).
+         required=false keeps installs working on devices without them. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
     <application
         android:name=".LettersApplication"
         android:allowBackup="true"

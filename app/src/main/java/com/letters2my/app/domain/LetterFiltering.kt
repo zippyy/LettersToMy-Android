@@ -48,6 +48,7 @@ object LetterFiltering {
         val title: String,
         val body: String,
         val authorName: String,
+        val isFavorite: Boolean = false,
         val updatedAtEpochMs: Long = 0L,
         val createdAtEpochMs: Long = 0L
     )
@@ -115,7 +116,5 @@ object LetterFiltering {
 
     /** Sort: updatedAt descending (most recent first), like the iOS list. */
     fun sortByUpdated(letters: List<LetterLike>): List<LetterLike> =
-        letters.sortedByDescending { updatedEpochMs(it) }
-
-    private fun updatedEpochMs(letter: LetterLike): Long = 0L // placeholder; caller overrides
+        letters.sortedByDescending { it.updatedAtEpochMs }
 }

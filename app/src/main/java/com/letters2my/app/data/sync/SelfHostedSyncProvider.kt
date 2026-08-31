@@ -16,30 +16,30 @@ class SelfHostedSyncProvider(
     override val name = "Self-Hosted"
     override val supportsPortableArchives: Boolean = true
 
-    private val api = SelfHostedApiClient(baseUrl) { apiToken }
+    val apiClient: SelfHostedApiClient = SelfHostedApiClient(baseUrl) { apiToken }
 
     override suspend fun pushArchive(archive: ByteArray, name: String, letterCount: Int) {
-        val result = api.pushBackup(id = name, letterCount = letterCount, archive = archive)
+        val result = apiClient.pushBackup(id = name, letterCount = letterCount, archive = archive)
         Log.d("SelfHostedSync", "backup ${result.id} pushed: ${result.size} bytes sha256=${result.sha256.take(12)}…")
     }
 
     override suspend fun listArchives(): List<String> =
-        api.listBackups().map { it.id }
+        apiClient.listBackups().map { it.id }
 
     override suspend fun pullArchive(name: String): ByteArray? = try {
-        api.pullBackup(name)
+        apiClient.pullBackup(name)
     } catch (e: SelfHostedApiClient.ApiException) {
         if (e.code == "not_found") null else throw e
     }
 
     override suspend fun deleteArchive(name: String) {
-        api.deleteBackup(name)
+        apiClient.deleteBackup(name)
     }
 
     override suspend fun pushSnapshot(platform: String, data: ByteArray) {
-        api.pushSnapshot(platform, data)
+        apiClient.pushSnapshot(platform, data)
     }
 
     override suspend fun pullSnapshot(platform: String): ByteArray? =
-        api.pullSnapshot(platform)
+        apiClient.pullSnapshot(platform)
 }

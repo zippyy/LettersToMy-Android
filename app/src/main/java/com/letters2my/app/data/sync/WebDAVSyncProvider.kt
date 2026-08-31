@@ -4,83 +4,104 @@ import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.HttpURLConnection
 
 /**
- * Syncs via WebDAV or Nextcloud (Nextcloud IS WebDAV at /remote.php/dav/files/).
+ * WebDAV/Nextcloud provider for PORTABLE .letterstomy archives.
+ * Raw SQLite snapshots removed — archives stored as
+ * `letters_to_my/backups/<name>.letterstomy` under the base URL.
  */
 class WebDAVSyncProvider(
     private val baseURL: String,
     private val username: String? = null,
-    private val password: String? = null,
-    override val name: String = "WebDAV"
+    private val password: String? = null
 ) : CloudSyncProvider {
+
+    override val name = "WebDAV"
+    override val supportsPortableArchives: Boolean = true
 
     companion object {
         private const val TAG = "WebDAVSync"
-        private const val SYNC_FILE = "letters_to_my_sync.db"
+        private const val BACKUP_DIR = "letters_to_my/backups"
     }
 
     private val client = OkHttpClient()
 
-    override suspend fun pushDatabase(data: ByteArray, timestamp: Long) = withContext(Dispatchers.IO) {
-        val url = "$baseURL/$SYNC_FILE"
-        val body = RequestBody.create("application/octet-stream".toMediaType(), data)
-
-        client.newCall(authRequest(Request.Builder().url(url).put(body)).build()).execute().use { resp ->
-            if (resp.isSuccessful) Log.d(TAG, "Pushed to $name: ${data.size} bytes")
-            else Log.e(TAG, "Push failed: ${resp.code}")
-        }
-        Unit
+    private fun fileUrl(name: String): String {
+        val base = baseURL.trimEnd('/')
+        return "$base/$BACKUP_DIR/$name.letterstomy"
     }
 
-    override suspend fun pullDatabase(): CloudSyncResult? = withContext(Dispatchers.IO) {
-        val url = "$baseURL/$SYNC_FILE"
+    override suspend fun pushArchive(archive: ByteArray, name: String, letterCount: Int): Unit =
+        withContext(Dispatchers.IO) {
+            val url = fileUrl(name)
+            val body = archive.toRequestBody("application/octet-stream".toMediaType())
+            client.newCall(authRequest(Request.Builder().url(url).put(body)).build()).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    throw IllegalStateException("WebDAV upload failed: ${resp.code} ${resp.body?.string()}")
+                }
+                Log.d(TAG, "Pushed archive $url")
+            }
+        }
 
-        // PROPfind to get last modified
+    override suspend fun listArchives(): List<String> = withContext(Dispatchers.IO) {
+        val base = baseURL.trimEnd('/')
         val propfind = """
             <?xml version="1.0"?>
             <d:propfind xmlns:d="DAV:">
-                <d:prop><d:getlastmodified/></d:prop>
+                <d:prop><d:displayname/></d:prop>
             </d:propfind>
         """.trimIndent()
-        val propBody = RequestBody.create("application/xml".toMediaType(), propfind)
-
-        val propReq = authRequest(Request.Builder().url(url).method("PROPFIND", propBody)).build()
-        val propResp = client.newCall(propReq).execute()
-        val remoteTime = if (propResp.isSuccessful) {
-            parseLastModified(propResp.body?.string() ?: "")
-        } else 0L
-        propResp.close()
-
-        // GET
-        val getReq = authRequest(Request.Builder().url(url).get()).build()
-        client.newCall(getReq).execute().use { resp ->
-            if (!resp.isSuccessful || resp.code == HttpURLConnection.HTTP_NOT_FOUND) return@withContext null
-            val data = resp.body?.bytes() ?: return@withContext null
-            Log.d(TAG, "Pulled from $name: ${data.size} bytes")
-            CloudSyncResult(data, remoteTime, name)
+        val propBody = propfind.toRequestBody("application/xml".toMediaType())
+        val req = authRequest(Request.Builder().url("$base/$BACKUP_DIR/").method("PROPFIND", propBody)).build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) return@withContext emptyList()
+            val xml = resp.body?.string() ?: return@withContext emptyList()
+            // <d:href>.../backups/NAME.letterstomy</d:href>
+            val pattern = Regex("<d:href>([^<]+)</d:href>")
+            pattern.findAll(xml).mapNotNull { m ->
+                val href = m.groupValues[1].trim()
+                val name = href.substringAfterLast('/').removeSuffix(".letterstomy")
+                name.takeIf { it.isNotEmpty() && href.endsWith(".letterstomy") }
+            }.distinct().toList()
         }
     }
 
+    override suspend fun pullArchive(name: String): ByteArray? = withContext(Dispatchers.IO) {
+        val getReq = authRequest(Request.Builder().url(fileUrl(name)).get()).build()
+        client.newCall(getReq).execute().use { resp ->
+            if (resp.code == HttpURLConnection.HTTP_NOT_FOUND) return@withContext null
+            if (!resp.isSuccessful) throw IllegalStateException("WebDAV download failed: ${resp.code}")
+            resp.body?.bytes()
+        }
+    }
+
+    override suspend fun deleteArchive(name: String) = withContext(Dispatchers.IO) {
+        val delReq = authRequest(Request.Builder().url(fileUrl(name)).delete()).build()
+        client.newCall(delReq).execute().use { resp ->
+            if (!resp.isSuccessful && resp.code != HttpURLConnection.HTTP_NOT_FOUND) {
+                throw IllegalStateException("WebDAV delete failed: ${resp.code}")
+            }
+        }
+    }
+
+    override suspend fun pushSnapshot(platform: String, data: ByteArray) {
+        throw UnsupportedOperationException("Raw device snapshots are not supported on WebDAV.")
+    }
+
+    override suspend fun pullSnapshot(platform: String): ByteArray? =
+        throw UnsupportedOperationException("Raw device snapshots are not supported on WebDAV.")
+
     private fun authRequest(builder: Request.Builder): Request.Builder {
-        // Using 'auth' header to avoid naming conflicts with 'Authorization'
         if (username != null && password != null) {
             val creds = Base64.encodeToString("$username:$password".toByteArray(), Base64.NO_WRAP)
             builder.header("Authorization", "Basic $creds")
         }
         return builder
-    }
-
-    private fun parseLastModified(xml: String): Long {
-        val pattern = Regex("<d:getlastmodified>([^<]+)</d:getlastmodified>")
-        val match = pattern.find(xml) ?: return 0L
-        return try {
-            val iso = match.groupValues[1]
-            java.time.ZonedDateTime.parse(iso, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME)
-                .toInstant().toEpochMilli()
-        } catch (_: Exception) { 0L }
     }
 }

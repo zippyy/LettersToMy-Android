@@ -37,6 +37,11 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // Room schema export for migration validation (app/schemas is committed).
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
 }
 
 dependencies {

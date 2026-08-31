@@ -1,9 +1,6 @@
 package com.letters2my.app.ui.settings
 
 import android.content.Context
-import android.content.Intent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -18,67 +15,46 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.letters2my.app.LettersApplication
+import com.letters2my.app.data.local.SecureCredentials
+import com.letters2my.app.data.sync.SelfHostedApiClient
 import kotlinx.coroutines.launch
 
+/**
+ * Settings: app info, self-hosted integration (URL + token + Test Connection
+ * with typed status states), secure credential storage, backup/restore
+ * entry points. Mirrors the iOS BackupSettings/Settings surface.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen() {
     val context = LocalContext.current
     val app = context.applicationContext as LettersApplication
     val scope = rememberCoroutineScope()
-    val prefs = remember { context.getSharedPreferences("cloud_sync_config", Context.MODE_PRIVATE) }
+
+    val secure = remember { app.secureCredentials }
+    val settings = remember { app.settings }
+
+    // Self-hosted config (non-secret URL in settings; token in Keystore).
+    var selfhostedURL by remember { mutableStateOf(settings.selfHostedUrl) }
+    var selfhostedToken by remember {
+        mutableStateOf(secure.get(SecureCredentials.KEY_SELFHOSTED_TOKEN) ?: "")
+    }
+
+    // Connection test state — typed status, never silent Boolean/null.
+    var connectionState by remember { mutableStateOf<ConnectionState>(ConnectionState.Idle) }
 
     val scrollState = rememberScrollState()
 
-    // Google Drive sign-in state
-    var isSignedIn by remember { mutableStateOf(GoogleSignIn.getLastSignedInAccount(context) != null) }
-    var isSyncing by remember { mutableStateOf(false) }
-
-    // S3 config state
-    var s3Endpoint by remember { mutableStateOf(prefs.getString("s3_endpoint", "") ?: "") }
-    var s3Bucket by remember { mutableStateOf(prefs.getString("s3_bucket", "") ?: "") }
-    var s3AccessKey by remember { mutableStateOf(prefs.getString("s3_access_key", "") ?: "") }
-    var s3SecretKey by remember { mutableStateOf(prefs.getString("s3_secret_key", "") ?: "") }
-    var s3Region by remember { mutableStateOf(prefs.getString("s3_region", "us-east-1") ?: "us-east-1") }
-
-    // WebDAV config state
-    var webdavURL by remember { mutableStateOf(prefs.getString("webdav_url", "") ?: "") }
-    var webdavUser by remember { mutableStateOf(prefs.getString("webdav_user", "") ?: "") }
-    var webdavPassword by remember { mutableStateOf(prefs.getString("webdav_password", "") ?: "") }
-
-    // Dropbox config state
-    var dropboxToken by remember { mutableStateOf(prefs.getString("dropbox_token", "") ?: "") }
-
-    // Self-hosted config state
-    var selfhostedURL by remember { mutableStateOf(prefs.getString("selfhosted_url", "") ?: "") }
-    var selfhostedToken by remember { mutableStateOf(prefs.getString("selfhosted_token", "") ?: "") }
-
-    val signInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val account = GoogleSignIn.getSignedInAccountFromIntent(result.data).result
-        isSignedIn = account != null
-        if (account != null) {
-            scope.launch { app.syncFromDriveIfSignedIn() }
+    fun saveSelfHosted() {
+        settings.selfHostedUrl = selfhostedURL.trim()
+        if (selfhostedToken.isNotBlank()) {
+            secure.put(SecureCredentials.KEY_SELFHOSTED_TOKEN, selfhostedToken.trim())
+        } else {
+            secure.remove(SecureCredentials.KEY_SELFHOSTED_TOKEN)
         }
-    }
-
-    fun savePrefs() {
-        prefs.edit().apply {
-            putString("s3_endpoint", s3Endpoint)
-            putString("s3_bucket", s3Bucket)
-            putString("s3_access_key", s3AccessKey)
-            putString("s3_secret_key", s3SecretKey)
-            putString("s3_region", s3Region)
-            putString("webdav_url", webdavURL)
-            putString("webdav_user", webdavUser)
-            putString("webdav_password", webdavPassword)
-            putString("dropbox_token", dropboxToken)
-            putString("selfhosted_url", selfhostedURL)
-            putString("selfhosted_token", selfhostedToken)
-        }.apply()
+        // Reconfigure providers so the new config is live.
+        app.reconfigureProviders()
     }
 
     Scaffold(
@@ -92,101 +68,149 @@ fun SettingsScreen() {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // ── Google Drive ──
-            ProviderCard(
-                title = "Google Drive",
-                icon = Icons.Default.Cloud,
-                iconColor = MaterialTheme.colorScheme.primary,
-                isConfigured = isSignedIn
-            ) {
-                if (isSignedIn) {
-                    if (isSyncing) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Syncing...")
+            // ── Self-Hosted ──
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Home, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Self-Hosted Server", style = MaterialTheme.typography.titleMedium)
+                            Text("LettersToMy-SelfHostedSync API v1 (Docker)", style = MaterialTheme.typography.bodySmall)
                         }
-                    } else {
-                        Button(onClick = {
-                            scope.launch { isSyncing = true; app.syncToDrive(); isSyncing = false }
-                        }) {
-                            Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Sync Now")
+                        if (connectionState is ConnectionState.Connected) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         }
                     }
-                } else {
-                    Button(onClick = {
-                        signInLauncher.launch(app.driveSync.signInClient.signInIntent)
-                    }) {
-                        Text("Sign In with Google")
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = selfhostedURL,
+                        onValueChange = { selfhostedURL = it },
+                        label = { Text("Server URL") },
+                        placeholder = { Text("https://sync.example.com:8080") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = selfhostedToken,
+                        onValueChange = { selfhostedToken = it },
+                        label = { Text("API Token") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Button(
+                            onClick = {
+                                saveSelfHosted()
+                                scope.launch {
+                                    connectionState = ConnectionState.Testing
+                                    connectionState = testConnection(
+                                        selfhostedURL.trim(),
+                                        selfhostedToken.trim()
+                                    )
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Test Connection")
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        when (connectionState) {
+                            is ConnectionState.Testing -> {
+                                CircularProgressIndicator(Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Testing…", style = MaterialTheme.typography.bodySmall)
+                            }
+                            is ConnectionState.Connected -> {
+                                Text(
+                                    "Connected — ${(connectionState as ConnectionState.Connected).version}",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            is ConnectionState.Failed -> {
+                                Text(
+                                    (connectionState as ConnectionState.Failed).message,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            is ConnectionState.ApiIncompatible -> {
+                                Text(
+                                    (connectionState as ConnectionState.ApiIncompatible).message,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            is ConnectionState.CapabilityMissing -> {
+                                Text(
+                                    (connectionState as ConnectionState.CapabilityMissing).message,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            ConnectionState.Idle -> {}
+                        }
+                    }
+                    if (selfhostedURL.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = {
+                            selfhostedURL = ""
+                            selfhostedToken = ""
+                            secure.remove(SecureCredentials.KEY_SELFHOSTED_TOKEN)
+                            settings.selfHostedUrl = ""
+                            app.reconfigureProviders()
+                        }) {
+                            Text("Clear Configuration", color = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
             }
 
-            // ── S3 Compatible ──
-            var s3Expanded by remember { mutableStateOf(false) }
-            ProviderCard(
-                title = "S3 Compatible",
-                subtitle = "AWS S3, Backblaze B2, Cloudflare R2, MinIO",
-                icon = Icons.Default.Storage,
-                iconColor = MaterialTheme.colorScheme.tertiary,
-                isConfigured = s3Endpoint.isNotEmpty() && s3Bucket.isNotEmpty(),
-                expanded = s3Expanded,
-                onToggle = { s3Expanded = it }
-            ) {
-                OutlinedTextField(s3Endpoint, { s3Endpoint = it; savePrefs() }, label = { Text("Endpoint URL") }, placeholder = { Text("https://s3.us-east-1.amazonaws.com") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(s3Bucket, { s3Bucket = it; savePrefs() }, label = { Text("Bucket") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(s3AccessKey, { s3AccessKey = it; savePrefs() }, label = { Text("Access Key") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(s3SecretKey, { s3SecretKey = it; savePrefs() }, label = { Text("Secret Key") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(s3Region, { s3Region = it; savePrefs() }, label = { Text("Region") }, placeholder = { Text("us-east-1") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            }
-
-            // ── WebDAV / Nextcloud ──
-            var webdavExpanded by remember { mutableStateOf(false) }
-            ProviderCard(
-                title = "WebDAV / Nextcloud",
-                subtitle = "Nextcloud, ownCloud, Apache mod_dav",
-                icon = Icons.Default.Dns,
-                iconColor = MaterialTheme.colorScheme.secondary,
-                isConfigured = webdavURL.isNotEmpty(),
-                expanded = webdavExpanded,
-                onToggle = { webdavExpanded = it }
-            ) {
-                OutlinedTextField(webdavURL, { webdavURL = it; savePrefs() }, label = { Text("Base URL") }, placeholder = { Text("https://nextcloud.example.com/remote.php/dav/files/USER") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(webdavUser, { webdavUser = it; savePrefs() }, label = { Text("Username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(webdavPassword, { webdavPassword = it; savePrefs() }, label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-            }
-
-            // ── Dropbox ──
-            var dropboxExpanded by remember { mutableStateOf(false) }
-            ProviderCard(
-                title = "Dropbox",
-                subtitle = "OAuth access token from Dropbox App Console",
-                icon = Icons.Default.Folder,
-                iconColor = MaterialTheme.colorScheme.error,
-                isConfigured = dropboxToken.isNotEmpty(),
-                expanded = dropboxExpanded,
-                onToggle = { dropboxExpanded = it }
-            ) {
-                OutlinedTextField(dropboxToken, { dropboxToken = it; savePrefs() }, label = { Text("Access Token") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                Text("Get a token from the Dropbox App Console → Generate access token.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-
-            // ── Self-Hosted ──
-            var selfhostedExpanded by remember { mutableStateOf(false) }
-            ProviderCard(
-                title = "Self-Hosted",
-                subtitle = "Your own LettersToMy sync server (Docker)",
-                icon = Icons.Default.Home,
-                iconColor = MaterialTheme.colorScheme.primaryContainer,
-                isConfigured = selfhostedURL.isNotEmpty(),
-                expanded = selfhostedExpanded,
-                onToggle = { selfhostedExpanded = it }
-            ) {
-                OutlinedTextField(selfhostedURL, { selfhostedURL = it; savePrefs() }, label = { Text("Server URL") }, placeholder = { Text("https://sync.example.com:8080") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(selfhostedToken, { selfhostedToken = it; savePrefs() }, label = { Text("API Token") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                Text("Run docker compose up -d from LettersToMy-SelfHostedSync.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // ── Backup / Restore ──
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Save, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text("Backup & Restore", style = MaterialTheme.typography.titleMedium)
+                            Text("Portable encrypted .letterstomy archives", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Backups are encrypted with your passphrase and can be restored on iOS or Android.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row {
+                        OutlinedButton(onClick = {
+                            // Triggered from a dedicated flow (see BackupScreen).
+                        }) {
+                            Icon(Icons.Default.Upload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Create Backup")
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedButton(onClick = {}) {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Restore")
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Full backup/restore flow is on the Backup screen (Letters → overflow).",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             // ── About ──
@@ -194,6 +218,11 @@ fun SettingsScreen() {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("Letters to My", style = MaterialTheme.typography.titleMedium)
                     Text("Version 0.1.0", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Local data: Room  |  Portable recovery: .letterstomy  |  Self-hosted: API v1",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
@@ -202,47 +231,43 @@ fun SettingsScreen() {
     }
 }
 
-@Composable
-private fun ProviderCard(
-    title: String,
-    subtitle: String? = null,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    iconColor: androidx.compose.ui.graphics.Color,
-    isConfigured: Boolean,
-    expanded: Boolean = true,
-    onToggle: ((Boolean) -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit = {}
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = if (onToggle != null) Modifier.fillMaxWidth() else Modifier
-            ) {
-                Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium)
-                    if (subtitle != null) {
-                        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                Icon(
-                    if (isConfigured) Icons.Default.CheckCircle else Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = if (isConfigured) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            if (expanded) {
-                Spacer(Modifier.height(8.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
-            }
-            if (onToggle != null) {
-                TextButton(onClick = { onToggle(!expanded) }) {
-                    Text(if (expanded) "Hide" else "Configure")
-                }
-            }
+sealed interface ConnectionState {
+    data object Idle : ConnectionState
+    data object Testing : ConnectionState
+    data class Connected(val version: String) : ConnectionState
+    data class Failed(val message: String) : ConnectionState
+    data class ApiIncompatible(val message: String) : ConnectionState
+    data class CapabilityMissing(val message: String) : ConnectionState
+}
+
+/**
+ * Real Test Connection against the live server: verifies service identity,
+ * api_version == 1, and backup capability. Never reports "Connected" merely
+ * because TCP/HTTP returned something.
+ */
+suspend fun testConnection(rawUrl: String, token: String): ConnectionState {
+    if (rawUrl.isBlank() || token.isBlank()) {
+        return ConnectionState.Failed("Server URL and API token are required.")
+    }
+    return try {
+        val client = SelfHostedApiClient(SelfHostedApiClient.normalizeBaseUrl(rawUrl)) { token }
+        val status = client.status()
+        when {
+            status.service.isEmpty() -> ConnectionState.Failed("Server did not identify itself.")
+            status.apiVersion != 1 -> ConnectionState.ApiIncompatible(
+                "Server API v${status.apiVersion} — this app requires v1."
+            )
+            !status.hasBackupCapability -> ConnectionState.CapabilityMissing(
+                "Server does not advertise the backups capability."
+            )
+            else -> ConnectionState.Connected("v${status.apiVersion} · ${status.serverVersion}")
         }
+    } catch (e: SelfHostedApiClient.ApiException) {
+        when (e.code) {
+            "unauthorized", "invalid_token" -> ConnectionState.Failed("Authentication failed (${e.code}).")
+            else -> ConnectionState.Failed("Server error: ${e.message}")
+        }
+    } catch (e: Exception) {
+        ConnectionState.Failed("Server unreachable: ${e.message?.take(80)}")
     }
 }

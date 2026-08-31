@@ -1,23 +1,22 @@
 package com.letters2my.app.data.sync
 
-import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
-import java.io.ByteArrayOutputStream
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.security.MessageDigest
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * Cross-platform sync via any S3-compatible object storage
- * (AWS S3, Backblaze B2, Cloudflare R2, MinIO, etc).
- *
- * Both platforms push timestamped database snapshots to
- * the same bucket. On launch, each downloads the latest
- * snapshot from the OTHER platform if it's newer.
+ * S3-compatible provider for PORTABLE .letterstomy archives
+ * (AWS S3, Backblaze B2, Cloudflare R2, MinIO). Raw SQLite snapshots are
+ * removed — archives are opaque encrypted blobs stored as
+ * `backups/<name>.letterstomy`.
  */
 class S3SyncService(
     private val endpoint: String,
@@ -25,74 +24,81 @@ class S3SyncService(
     private val accessKey: String,
     private val secretKey: String,
     private val region: String = "us-east-1"
-) {
+) : CloudSyncProvider {
+
+    override val name = "S3"
+    override val supportsPortableArchives: Boolean = true
+
     companion object {
         private const val TAG = "S3Sync"
+        private const val PREFIX = "backups/"
     }
 
     private val client = OkHttpClient()
 
-    /** Push the local database to S3 with a platform prefix. */
-    suspend fun pushDatabase(dbFile: java.io.File, platform: String) = withContext(Dispatchers.IO) {
-        val key = "sync/${platform}-letters.db"
-        val data = dbFile.readBytes()
-        val sha256 = sha256Hex(data)
+    private fun keyFor(name: String) = "$PREFIX${name}.letterstomy"
 
-        val request = signedRequest("PUT", key, data, sha256)
-        client.newCall(request).execute().use { resp ->
-            if (resp.isSuccessful) {
-                Log.d(TAG, "Pushed $platform database to S3 ($sha256)")
-            } else {
-                Log.e(TAG, "Push failed: ${resp.code} ${resp.body?.string()}")
+    override suspend fun pushArchive(archive: ByteArray, name: String, letterCount: Int): Unit =
+        withContext(Dispatchers.IO) {
+            val key = keyFor(name)
+            val sha256 = sha256Hex(archive)
+            val request = signedRequest("PUT", key, archive, sha256)
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    throw IllegalStateException("S3 upload failed: ${resp.code} ${resp.body?.string()}")
+                }
+                Log.d(TAG, "Pushed archive $key ($sha256)")
+            }
+        }
+
+    override suspend fun listArchives(): List<String> = withContext(Dispatchers.IO) {
+        // GET ?prefix=backups/&delimiter=/ — parse Keys from S3 XML.
+        val request = signedRequest("GET", "", ByteArray(0), "")
+        val url = request.url.newBuilder()
+            .addQueryParameter("prefix", PREFIX)
+            .addQueryParameter("delimiter", "/")
+            .build()
+        client.newCall(request.newBuilder().url(url).build()).execute().use { resp ->
+            if (!resp.isSuccessful) throw IllegalStateException("S3 list failed: ${resp.code}")
+            val xml = resp.body?.string() ?: ""
+            val pattern = Regex("<Key>${Regex.escape(PREFIX)}([^<]+)\\.letterstomy</Key>|" +
+                "<Prefix>${Regex.escape(PREFIX)}([^<]+)\\.letterstomy</Prefix>")
+            pattern.findAll(xml).map { m ->
+                (m.groupValues[1].ifEmpty { m.groupValues[2] })
+            }.distinct().toList()
+        }
+    }
+
+    override suspend fun pullArchive(name: String): ByteArray? = withContext(Dispatchers.IO) {
+        val key = keyFor(name)
+        val req = signedRequest("GET", key, ByteArray(0), "")
+        client.newCall(req).execute().use { resp ->
+            if (resp.code == 404) return@withContext null
+            if (!resp.isSuccessful) throw IllegalStateException("S3 download failed: ${resp.code}")
+            resp.body?.bytes()
+        }
+    }
+
+    override suspend fun deleteArchive(name: String) = withContext(Dispatchers.IO) {
+        val key = keyFor(name)
+        val req = signedRequest("DELETE", key, ByteArray(0), "")
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful && resp.code != 404) {
+                throw IllegalStateException("S3 delete failed: ${resp.code}")
             }
         }
     }
 
-    /** Pull the latest database from another platform. Returns data if newer. */
-    suspend fun pullDatabase(platform: String, localLastModified: Long): ByteArray? = withContext(Dispatchers.IO) {
-        val key = "sync/${platform}-letters.db"
+    // Snapshots removed: raw-DB sync is not a valid cross-platform mechanism.
 
-        // HEAD to check last modified
-        val headReq = signedRequest("HEAD", key, ByteArray(0), "")
-        val headResp = client.newCall(headReq).execute()
-        if (!headResp.isSuccessful) {
-            headResp.close()
-            return@withContext null
-        }
-        val remoteModified = headResp.header("Last-Modified")?.let { iso ->
-            try { java.time.Instant.parse(iso).toEpochMilli() } catch (_: Exception) { 0L }
-        } ?: 0L
-        headResp.close()
-
-        if (remoteModified <= localLastModified) {
-            Log.d(TAG, "$platform database is not newer — skipping pull")
-            return@withContext null
-        }
-
-        // GET the data
-        val getReq = signedRequest("GET", key, ByteArray(0), "")
-        client.newCall(getReq).execute().use { resp ->
-            if (!resp.isSuccessful) return@withContext null
-            val data = resp.body?.bytes() ?: return@withContext null
-            Log.d(TAG, "Pulled $platform database: ${data.size} bytes")
-            data
-        }
+    override suspend fun pushSnapshot(platform: String, data: ByteArray) {
+        throw UnsupportedOperationException("Raw device snapshots are not supported on S3.")
     }
 
-    /** List all platform snapshots in the sync folder. */
-    suspend fun listPlatforms(): List<String> = withContext(Dispatchers.IO) {
-        val request = signedRequest("GET", "", ByteArray(0), "")
-        request.url.newBuilder().addQueryParameter("prefix", "sync/").addQueryParameter("delimiter", "/")
-        client.newCall(request).execute().use { resp ->
-            if (!resp.isSuccessful) return@withContext emptyList()
-            val xml = resp.body?.string() ?: return@withContext emptyList()
-            // Parse CommonPrefixes from S3 XML
-            val pattern = Regex("<Prefix>sync/([^<]+)-letters.db</Prefix>")
-            pattern.findAll(xml).map { it.groupValues[1] }.toList()
-        }
-    }
+    override suspend fun pullSnapshot(platform: String): ByteArray? =
+        throw UnsupportedOperationException("Raw device snapshots are not supported on S3.")
 
-    // MARK: - AWS Signature V4
+    // ── AWS Signature V4 ───────────────────────────
 
     private fun signedRequest(method: String, path: String, body: ByteArray, sha256: String): Request {
         val fullPath = if (path.isEmpty()) "" else "/$path"
@@ -120,7 +126,7 @@ class S3SyncService(
         val signature = hmacSHA256Hex(stringToSign.toByteArray(), signingKey)
         val authHeader = "AWS4-HMAC-SHA256 Credential=$accessKey/$scope,SignedHeaders=$signedHeaders,Signature=$signature"
 
-        val bodyPart = if (body.isNotEmpty()) RequestBody.create("application/octet-stream".toMediaType(), body) else null
+        val bodyPart = if (body.isNotEmpty()) body.toRequestBody("application/octet-stream".toMediaType()) else null
 
         return Request.Builder()
             .url(url)

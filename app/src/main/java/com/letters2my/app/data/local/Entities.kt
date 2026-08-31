@@ -3,7 +3,9 @@ package com.letters2my.app.data.local
 import androidx.room.*
 
 // ──────────────────────────────────────────────
-// Letter
+// Letter (v2: + author_member_id)
+// is_draft is retained as a legacy column; the canonical status is
+// derived from sealed_at (iOS semantics) via LetterStatusCalculator.
 // ──────────────────────────────────────────────
 
 @Entity(tableName = "letters")
@@ -12,6 +14,7 @@ data class LetterEntity(
     @ColumnInfo(name = "child_id") val childId: String?,
     @ColumnInfo(name = "branch_id") val branchId: String?,
     @ColumnInfo(name = "folder_id") val folderId: String?,
+    @ColumnInfo(name = "author_member_id") val authorMemberId: String?,
     @ColumnInfo(name = "title") val title: String,
     @ColumnInfo(name = "body") val body: String,
     @ColumnInfo(name = "author_name") val authorName: String,
@@ -20,7 +23,7 @@ data class LetterEntity(
     @ColumnInfo(name = "sealed_at") val sealedAt: Long?,
     @ColumnInfo(name = "is_favorite") val isFavorite: Boolean,
     @ColumnInfo(name = "is_draft") val isDraft: Boolean,
-    @ColumnInfo(name = "unlock_rule") val unlockRule: String,
+    @ColumnInfo(name = "unlock_rule") val unlockRuleRawValue: String,
     @ColumnInfo(name = "unlock_date") val unlockDate: Long?,
     @ColumnInfo(name = "unlock_age_years") val unlockAgeYears: Int?,
     @ColumnInfo(name = "life_event_name") val lifeEventName: String,
@@ -28,7 +31,7 @@ data class LetterEntity(
 )
 
 // ──────────────────────────────────────────────
-// Attachment
+// Attachment (v2: data is nullable to mirror iOS `Data?`)
 // ──────────────────────────────────────────────
 
 @Entity(
@@ -116,6 +119,84 @@ data class InvitationEntity(
     @ColumnInfo(name = "intended_recipient_id") val intendedRecipientId: String?,
     @ColumnInfo(name = "can_invite_others") val canInviteOthers: Boolean,
     @ColumnInfo(name = "status") val status: String, // pending, sent, accepted, declined, revoked, failed
+    @ColumnInfo(name = "created_at") val createdAt: Long
+)
+
+// ──────────────────────────────────────────────
+// Archive Member (v2, mirrors iOS ArchiveMemberRecord)
+// ──────────────────────────────────────────────
+
+@Entity(tableName = "members")
+data class MemberEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "display_name") val displayName: String,
+    @ColumnInfo(name = "relationship") val relationship: String,
+    @ColumnInfo(name = "role") val role: String, // owner, parentAdmin, organizer, contributor, viewer, recipient
+    @ColumnInfo(name = "status") val status: String, // invited, active, suspended, removed
+    @ColumnInfo(name = "can_invite_others") val canInviteOthers: Boolean,
+    @ColumnInfo(name = "scope_archive_wide") val scopeArchiveWide: Boolean,
+    @ColumnInfo(name = "scope_branch_ids") val scopeBranchIds: String,
+    @ColumnInfo(name = "scope_folder_ids") val scopeFolderIds: String,
+    @ColumnInfo(name = "scope_recipient_ids") val scopeRecipientIds: String,
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long
+)
+
+// ──────────────────────────────────────────────
+// Recovery Contact (v2, mirrors iOS RecoveryContactEntity)
+// ──────────────────────────────────────────────
+
+@Entity(tableName = "recovery_contacts")
+data class RecoveryContactEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "display_name") val displayName: String,
+    @ColumnInfo(name = "email_address") val emailAddress: String,
+    @ColumnInfo(name = "phone_number") val phoneNumber: String?,
+    @ColumnInfo(name = "relationship") val relationship: String,
+    @ColumnInfo(name = "recovery_key_hash") val recoveryKeyHash: ByteArray?,
+    @ColumnInfo(name = "notes") val notes: String?,
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long
+)
+
+// ──────────────────────────────────────────────
+// Delivery Record (v2, mirrors iOS DeliveryRecordEntity)
+// Meta/recipient notifications are metadata-only on Android —
+// same contract as iOS delivery metadata.
+// ──────────────────────────────────────────────
+
+@Entity(tableName = "delivery_records")
+data class DeliveryRecordEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "recipient_id") val recipientId: String,
+    @ColumnInfo(name = "original_letter_id") val originalLetterId: String,
+    @ColumnInfo(name = "title") val title: String,
+    @ColumnInfo(name = "body") val body: String,
+    @ColumnInfo(name = "author_name") val authorName: String,
+    @ColumnInfo(name = "delivered_at") val deliveredAt: Long,
+    @ColumnInfo(name = "read_at") val readAt: Long?,
+    @ColumnInfo(name = "reply_body") val replyBody: String?,
+    @ColumnInfo(name = "replied_at") val repliedAt: Long?,
+    @ColumnInfo(name = "state") val state: String, // delivered, read, replied
+    @ColumnInfo(name = "created_at") val createdAt: Long
+)
+
+@Entity(
+    tableName = "delivery_attachments",
+    foreignKeys = [ForeignKey(
+        entity = DeliveryRecordEntity::class,
+        parentColumns = ["id"],
+        childColumns = ["delivery_id"],
+        onDelete = ForeignKey.CASCADE
+    )]
+)
+data class DeliveryAttachmentEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "delivery_id") val deliveryId: String,
+    @ColumnInfo(name = "file_name") val fileName: String,
+    @ColumnInfo(name = "content_type") val contentType: String,
+    @ColumnInfo(name = "kind") val kind: String,
+    @ColumnInfo(name = "data") val data: ByteArray,
     @ColumnInfo(name = "created_at") val createdAt: Long
 )
 

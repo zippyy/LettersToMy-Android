@@ -21,7 +21,7 @@ if [ ! -d "$GRADLE_HOME" ]; then
     ok=0
     for attempt in 1 2 3; do
         if curl -fsSL --retry 5 --retry-all-errors --connect-timeout 20 \
-            "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}.zip" -o /tmp/gradle.zip \
+            "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -o /tmp/gradle.zip \
             && unzip -qo /tmp/gradle.zip -d /tmp/; then
             ok=1
             break

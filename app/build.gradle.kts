@@ -104,6 +104,11 @@ dependencies {
     testImplementation("androidx.test:core-ktx:1.5.0")
     testImplementation("androidx.test.ext:junit-ktx:1.1.5")
     testImplementation("androidx.room:room-testing:2.6.1")
+    // Real org.json on the unit-test classpath: SelfHostedApiClient uses the
+    // Android-framework org.json, whose android.jar stubs throw
+    // "not mocked" in local JVM tests. This jar shadows the stubs so the
+    // pure-JVM client can run against a live server in plain JUnit.
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")

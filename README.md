@@ -10,7 +10,12 @@ Feature-complete Android implementation. Domain parity, cross-platform
 `.letterstomy` archive compatibility (bidirectional, proven against the real
 Swift production codec), Room schema v2 with a tested non-destructive
 migration, live SelfHostedSync API v1 client (proven end-to-end against a
-real server), and a full automated test suite (101 JVM tests) + CI.
+real server), and a full automated JVM test suite (104 tests) + CI.
+
+Instrumentation (`androidTest`) tests are **not yet written** — there is no
+`app/src/androidTest` source set, so `connectedDebugAndroidTest` runs zero
+tests. JVM coverage (including the Room `MigrationTestHelper` migration proof,
+which runs under Robolectric) is the only automated coverage today.
 
 ## Architecture
 
@@ -93,7 +98,7 @@ user-initiated operations.
 
 ```bash
 ./gradlew assembleDebug          # debug APK
-./gradlew test                   # 101 JVM tests (domain, migration, DAO, restore safety)
+./gradlew test                   # 104 JVM tests (domain, migration, DAO, restore safety)
 ./gradlew lint                   # Android lint
 ```
 

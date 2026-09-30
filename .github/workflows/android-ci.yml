@@ -51,11 +51,13 @@ jobs:
             app/build/reports/tests/
             app/build/reports/lint-results*.html
 
-  # Optional: instrumentation tests on a managed emulator. They run the
-  # same Robolectric-backed suites (Migration + DAO) on a real device; the
-  # JVM suites above already cover the critical boundaries. Kept as a
-  # separate job so ordinary PRs don't pay the emulator boot cost unless
-  # the workflows run on a tag/schedule. No production signing required.
+  # Optional: instrumentation job scaffold. NOTE: there is currently no
+  # `app/src/androidTest` source set, so `connectedDebugAndroidTest` runs ZERO
+  # tests — this job validates that an emulator can boot and the instrumentation
+  # toolchain links, and is ready to run real device tests once they are
+  # written. It is NOT additional coverage today; the Robolectric-backed
+  # Migration + DAO suites that exercise the real Room schema live in
+  # app/src/test and run in the `build-and-test` job above.
   instrumentation:
     name: connectedAndroidTest (optional)
     runs-on: ubuntu-latest

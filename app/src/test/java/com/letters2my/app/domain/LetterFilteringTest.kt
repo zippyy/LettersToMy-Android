@@ -126,10 +126,57 @@ class LetterFilteringTest {
     @Test
     fun `search matches body case-insensitively`() {
         val letters = listOf(
-            letter("1", emma, body = "I love you so much", updated = 2),
-            letter("2", emma, body = "Remember the beach", updated = 1)
+            letter("1", emma, body = "I love you so much", sealed = past,
+                rule = "specificDate", unlockDate = past, updated = 2),
+            letter("2", emma, body = "Remember the beach", sealed = past,
+                rule = "specificDate", unlockDate = past, updated = 1)
         )
         assertEquals(listOf("1"), LetterFiltering.apply(letters, LetterFilter(query = "LOVE"), now).map { it.id })
+    }
+
+    // ── Sealed-content privacy ──────────────────────────────────────────
+
+    /**
+     * A sealed (scheduled, not yet unlocked) letter must not be findable by
+     * its body text. Otherwise typing a phrase from a sealed letter confirms
+     * its contents to a viewer who cannot open it.
+     */
+    @Test
+    fun `search does not match sealed letter body`() {
+        val letters = listOf(
+            letter("s", emma, title = "Birthday", body = "SECRETPHRASE",
+                sealed = past, rule = "specificDate", unlockDate = future, updated = 1)
+        )
+        assertTrue(
+            LetterFiltering.apply(letters, LetterFilter(query = "SECRETPHRASE"), now).isEmpty()
+        )
+    }
+
+    /**
+     * The sealed letter's title/author are already rendered in the list row,
+     * so those remain searchable and the letter stays findable.
+     */
+    @Test
+    fun `search still matches sealed letter title and author`() {
+        val letters = listOf(
+            letter("s", emma, title = "Graduation", body = "SECRETPHRASE", author = "Grandpa",
+                sealed = past, rule = "specificDate", unlockDate = future, updated = 1)
+        )
+        assertEquals(listOf("s"), LetterFiltering.apply(letters, LetterFilter(query = "Graduation"), now).map { it.id })
+        assertEquals(listOf("s"), LetterFiltering.apply(letters, LetterFilter(query = "grandpa"), now).map { it.id })
+    }
+
+    /** Unlocked and draft letters keep full-body search — only sealed content is excluded. */
+    @Test
+    fun `search matches body for unlocked and draft letters`() {
+        val letters = listOf(
+            letter("u", emma, body = "OPENPHRASE", sealed = past,
+                rule = "specificDate", unlockDate = past, updated = 2),
+            letter("d", emma, body = "DRAFTPHRASE", sealed = null,
+                rule = "specificDate", unlockDate = null, updated = 1)
+        )
+        assertEquals(listOf("u"), LetterFiltering.apply(letters, LetterFilter(query = "OPENPHRASE"), now).map { it.id })
+        assertEquals(listOf("d"), LetterFiltering.apply(letters, LetterFilter(query = "DRAFTPHRASE"), now).map { it.id })
     }
 
     @Test

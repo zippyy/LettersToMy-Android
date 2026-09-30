@@ -97,11 +97,21 @@ object LetterFiltering {
             if (letter.childId != requested) return false
         }
 
-        // Search
+        // Search. Sealed content must not leak through search: a SCHEDULED
+        // letter is sealed and locked, so its BODY is excluded from the
+        // haystack — otherwise typing a phrase from a sealed letter would
+        // confirm its contents to a viewer who cannot open it. Title/author
+        // stay searchable because the row already renders them for sealed
+        // letters. Drafts and unlocked letters keep full-body search.
+        // Mirrors LetterLibraryFilter (iOS).
         if (filter.query.isNotBlank()) {
             val q = filter.query.trim().lowercase()
-            val haystack = listOf(letter.title, letter.body, letter.authorName)
-                .joinToString(" ").lowercase()
+            val isSealed = statusOf(letter, nowEpochMs) == LetterStatus.SCHEDULED
+            val haystack = buildList {
+                add(letter.title)
+                if (!isSealed) add(letter.body)
+                add(letter.authorName)
+            }.joinToString(" ").lowercase()
             if (!haystack.contains(q)) return false
         }
 

@@ -51,15 +51,24 @@ jobs:
             app/build/reports/tests/
             app/build/reports/lint-results*.html
 
-  # Optional: instrumentation job scaffold. NOTE: there is currently no
-  # `app/src/androidTest` source set, so `connectedDebugAndroidTest` runs ZERO
-  # tests — this job validates that an emulator can boot and the instrumentation
-  # toolchain links, and is ready to run real device tests once they are
-  # written. It is NOT additional coverage today; the Robolectric-backed
-  # Migration + DAO suites that exercise the real Room schema live in
-  # app/src/test and run in the `build-and-test` job above.
+  # Device runtime smoke suite (real instrumented tests on a booted emulator).
+  #
+  # There ARE now instrumentation tests in app/src/androidTest, and
+  # `testInstrumentationRunner` is configured, so `connectedDebugAndroidTest`
+  # actually executes them. This job previously ran ZERO tests.
+  #
+  # Scope is deliberate: SettingsServerFlowTest and BackupRestoreFlowTest drive a
+  # REAL SelfHostedSync server and fail loudly (rather than silently skipping)
+  # when none is reachable — a deliberately-failing guard, not a skip — so they
+  # are run locally / against a deployed server and are NOT included here. The
+  # classes run here are self-contained and cover onboarding, navigation,
+  # recipient and draft CRUD, sealed-content search privacy, delete isolation,
+  # and backup-screen reachability.
+  #
+  # The final step asserts the executed test count, so this job can never pass
+  # vacuously.
   instrumentation:
-    name: connectedAndroidTest (optional)
+    name: connectedAndroidTest (device smoke)
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/')
     timeout-minutes: 60
@@ -75,12 +84,38 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - uses: reactivecircus/android-emulator-runner@v2
+      - name: Run device smoke suite
+        uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
           arch: x86_64
           disable-animations: true
-          script: ./gradlew connectedDebugAndroidTest --no-daemon
+          script: |
+            ./gradlew connectedDebugAndroidTest --no-daemon \
+              -Pandroid.testInstrumentationRunnerArguments.class=com.letters2my.app.OnboardingLaunchTest,com.letters2my.app.NavigationTest,com.letters2my.app.RecipientFlowTest,com.letters2my.app.DraftFlowTest,com.letters2my.app.SealedPrivacyTest,com.letters2my.app.BackupReachabilityTest
+
+      - name: Assert the device suite actually executed
+        run: |
+          python3 - <<'PY'
+          import glob, sys, xml.etree.ElementTree as ET
+          total = fails = 0
+          for f in glob.glob('app/build/outputs/androidTest-results/connected/**/*.xml', recursive=True):
+              r = ET.parse(f).getroot()
+              total += int(r.get('tests') or 0)
+              fails += int(r.get('failures') or 0) + int(r.get('errors') or 0)
+          print(f'executed={total} failures={fails}')
+          if total == 0:
+              sys.exit('FAIL: zero instrumentation tests executed (vacuous job)')
+          if fails:
+              sys.exit(f'FAIL: {fails} instrumentation test failure(s)')
+          PY
+
+      - name: Upload instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: androidtest-reports
+          path: app/build/reports/androidTests/
 
   # Tag-triggered release: builds the debug APK from the verified commit
   # (build-and-test must be green on the same tag) and attaches it to the

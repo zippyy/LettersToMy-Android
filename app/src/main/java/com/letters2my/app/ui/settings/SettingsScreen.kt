@@ -12,9 +12,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.letters2my.app.BuildConfig
 import com.letters2my.app.LettersApplication
 import com.letters2my.app.data.local.SecureCredentials
 import com.letters2my.app.data.sync.SelfHostedApiClient
@@ -92,7 +94,7 @@ fun SettingsScreen(
                         label = { Text("Server URL") },
                         placeholder = { Text("https://sync.example.com:8080") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().testTag("settings-url")
                     )
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
@@ -102,7 +104,7 @@ fun SettingsScreen(
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().testTag("settings-token")
                     )
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -218,7 +220,11 @@ fun SettingsScreen(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("Letters to My", style = MaterialTheme.typography.titleMedium)
-                    Text("Version 0.1.0", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Text(
                         "Local data: Room  |  Portable recovery: .letterstomy  |  Self-hosted: API v1",
                         style = MaterialTheme.typography.labelSmall,

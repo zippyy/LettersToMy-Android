@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -78,7 +79,7 @@ fun BackupScreen(
             }
 
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().testTag("backup-list"),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -101,6 +102,7 @@ fun BackupScreen(
                                 label = { Text("Backup passphrase") },
                                 singleLine = true,
                                 visualTransformation = PasswordVisualTransformation(),
+                                modifier = Modifier.testTag("backup-passphrase"),
                                 enabled = !isBusy
                             )
                             Spacer(Modifier.height(8.dp))
@@ -208,7 +210,10 @@ fun BackupScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = viewModel::applyRestore) { Text("Restore") }
+                TextButton(
+                    onClick = viewModel::applyRestore,
+                    modifier = Modifier.testTag("restore-confirm")
+                ) { Text("Restore") }
             },
             dismissButton = {
                 TextButton(onClick = viewModel::dismissRestorePreview) { Text("Cancel") }

@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
@@ -76,6 +77,7 @@ fun LettersToMyApp() {
                 NavigationBar {
                     tabs.forEach { tab ->
                         NavigationBarItem(
+                            modifier = Modifier.testTag("nav-${tab.route}"),
                             selected = currentRoute == tab.route,
                             onClick = {
                                 if (currentRoute != tab.route) {

@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.letters2my.app.data.local.BranchEntity
@@ -266,7 +267,8 @@ private fun AddChildDialog(
                     value = name,
                     onValueChange = onNameChange,
                     label = { Text("Name") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.testTag("child-name")
                 )
                 OutlinedButton(onClick = {
                     val cal = Calendar.getInstance()

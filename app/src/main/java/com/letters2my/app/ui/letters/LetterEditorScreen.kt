@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -163,20 +164,20 @@ fun LetterEditorScreen(
                 onValueChange = { viewModel.title.value = it },
                 label = { Text("Title") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().testTag("editor-title")
             )
             OutlinedTextField(
                 value = authorName,
                 onValueChange = { viewModel.authorName.value = it },
                 label = { Text("Author") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().testTag("editor-author")
             )
             OutlinedTextField(
                 value = body,
                 onValueChange = { viewModel.body.value = it },
                 label = { Text("Letter") },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp)
+                modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp).testTag("editor-body")
             )
 
             // Recipient / child (explicit pick — never auto-selects first)

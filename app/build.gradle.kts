@@ -16,6 +16,11 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "0.1.1"
+
+        // Required for connectedDebugAndroidTest. Without this AGP has no
+        // runner, and the connected task fails with "Unable to find
+        // instrumentation info" (or silently runs 0 tests).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -36,6 +41,9 @@ android {
 
     buildFeatures {
         compose = true
+        // Generates BuildConfig so the About panel can read VERSION_NAME
+        // instead of hardcoding it (it had drifted from versionName).
+        buildConfig = true
     }
 
     // Room schema export for migration validation (app/schemas is committed).
@@ -111,6 +119,11 @@ dependencies {
     testImplementation("org.json:json:20240303")
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
